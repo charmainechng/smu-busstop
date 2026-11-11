@@ -1,0 +1,6 @@
+{
+  "name": "SMU Lobby Bus Transit Display",
+  "description": "High-visibility digital lobby signage display showing real-time bus timings, distances, and walking estimates for all bus stops surrounding Singapore Management University.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
