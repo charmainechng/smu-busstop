@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import healthHandler from './api/health.ts';
 import busTimingsHandler from './api/bustimings.ts';
 import busStopsHandler from './api/busstops.ts';
+import feedHandler from './api/feed.js';
+import busHandler from './api/bus.js';
 
 dotenv.config();
 
@@ -29,6 +31,14 @@ app.use((req, res, next) => {
 });
 
 // 1. API Endpoints (Mount universal serverless handlers)
+app.get(['/api/feed', '/api/feed.xml', '/feed'], (req, res) => {
+  return feedHandler(req, res);
+});
+
+app.all(['/api/bus', '/api/bus.js'], (req, res) => {
+  return busHandler(req, res);
+});
+
 app.all(['/api/health', '/api/health/', '/api/health.ts', '/health'], (req, res) => {
   return healthHandler(req, res);
 });
