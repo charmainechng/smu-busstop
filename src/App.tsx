@@ -5,7 +5,7 @@ import { SignageHeader } from './components/SignageHeader';
 import { BusStopCardSinglePage } from './components/BusStopCardSinglePage';
 import { CampusMapModal } from './components/CampusMapModal';
 import { getServiceDestination } from './utils/busDestinations';
-import { Footprints, Umbrella, Loader2 } from 'lucide-react';
+import { Footprints, Umbrella, Loader2, RefreshCw } from 'lucide-react';
 
 const REFRESH_INTERVAL_SECONDS = 15;
 const SMU_MAIN_LOBBY = SMU_LOBBIES[0]; // SMU Connexion & Administration Building Main Lobby
@@ -20,6 +20,7 @@ export default function App() {
   const [isMapOpen, setIsMapOpen] = useState<boolean>(false);
   const [isLtaConfigured, setIsLtaConfigured] = useState<boolean>(false);
   const [ltaSource, setLtaSource] = useState<string>('lta_api');
+  const [selectedMobileStopId, setSelectedMobileStopId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   // Helper to convert LTA DataMall Service to BusArrivalInfo
@@ -196,31 +197,42 @@ export default function App() {
   // Remove bus stops that do not have any bus services (assumed to be not functioning)
   const functioningStops = busStops.filter((s) => s.services && s.services.length > 0);
 
-  const displayedStops =
+  const baseDisplayedStops =
     viewMode === 'core-4'
       ? functioningStops.filter((s) => ['04121', '04179', '04029', '08069'].includes(s.id))
       : functioningStops;
 
-  // Responsive grid layout based on number of active functioning stops to maintain zero scroll
+  // On mobile, if a single stop chip is selected, filter to that stop
+  const displayedStops = selectedMobileStopId
+    ? baseDisplayedStops.filter((s) => s.id === selectedMobileStopId)
+    : baseDisplayedStops;
+
+  // Responsive grid layout:
+  // - On desktop (lg:), maintains strict zero-scroll lobby layout
+  // - On mobile (<lg), provides a responsive column layout with natural touch scrolling
   const getGridClass = (count: number, isCore4: boolean) => {
     if (isCore4 || count <= 4) {
-      if (count <= 2) return 'grid grid-cols-1 sm:grid-cols-2 grid-rows-1 gap-3 h-full w-full overflow-hidden';
-      if (count === 3) return 'grid grid-cols-1 sm:grid-cols-3 grid-rows-1 gap-3 h-full w-full overflow-hidden';
-      return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 grid-rows-1 gap-3 h-full w-full overflow-hidden';
+      if (count <= 2) {
+        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-rows-1 gap-3.5 lg:gap-3 w-full lg:h-full lg:overflow-hidden';
+      }
+      if (count === 3) {
+        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 lg:grid-rows-1 gap-3.5 lg:gap-3 w-full lg:h-full lg:overflow-hidden';
+      }
+      return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-3.5 lg:gap-3 w-full lg:h-full lg:overflow-hidden';
     }
     if (count <= 6) {
-      return 'grid grid-cols-2 lg:grid-cols-3 grid-rows-2 gap-2.5 h-full w-full overflow-hidden';
+      return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 lg:grid-rows-2 gap-3.5 lg:gap-2.5 w-full lg:h-full lg:overflow-hidden';
     }
-    return 'grid grid-cols-2 lg:grid-cols-4 grid-rows-2 gap-2.5 h-full w-full overflow-hidden';
+    return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-2 gap-3.5 lg:gap-2.5 w-full lg:h-full lg:overflow-hidden';
   };
 
   const gridClass = getGridClass(displayedStops.length, viewMode === 'core-4');
   const maxRowsPerCard = displayedStops.length <= 4 || viewMode === 'core-4' ? 6 : 4;
 
   return (
-    <div className="h-screen max-h-screen w-screen max-w-screen overflow-hidden flex flex-col bg-slate-950 text-slate-100 font-sans select-none antialiased">
+    <div className="min-h-screen lg:h-screen lg:max-h-screen w-screen max-w-screen overflow-x-hidden overflow-y-auto lg:overflow-hidden flex flex-col bg-slate-950 text-slate-100 font-sans select-none antialiased pb-20 lg:pb-0">
       
-      {/* 1. Header */}
+      {/* 1. Header (Responsive for desktop & phone) */}
       <SignageHeader
         currentTime={currentTime}
         refreshSecondsLeft={refreshSecondsLeft}
@@ -235,46 +247,93 @@ export default function App() {
       />
 
       {/* 2. Status & Origin Reference Strip */}
-      <div className="px-4 py-1.5 bg-slate-900/90 border-b border-slate-800/80 flex items-center justify-between text-xs text-slate-300 shrink-0 font-mono">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-amber-300 font-bold">
-            <Footprints className="w-3.5 h-3.5 text-amber-400" />
-            Origin: SMU Main Lobby (Connexion &amp; Admin)
+      <div className="px-3 sm:px-4 py-1.5 bg-slate-900/90 border-b border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-300 shrink-0 font-mono gap-1">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="flex items-center gap-1.5 text-amber-300 font-bold truncate">
+            <Footprints className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="truncate">Origin: SMU Main Lobby</span>
           </span>
           <span className="text-slate-600 hidden sm:inline">|</span>
-          <span className="text-emerald-400 hidden sm:inline flex items-center gap-1">
-            <Umbrella className="w-3.5 h-3.5 text-sky-400" />
-            Underground Concourse Available (Rain Sheltered)
+          <span className="text-emerald-400 hidden sm:flex items-center gap-1">
+            <Umbrella className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            Concourse Sheltered
           </span>
         </div>
 
-        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+        <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-slate-400">
           <span className="text-slate-300 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse-subtle" />
-            {displayedStops.length} Active Stops Operating
+            {functioningStops.length} Active Stops
           </span>
           <span className="text-slate-600 hidden md:inline">|</span>
-          <span className="text-slate-300">
-            {viewMode === 'all-8' ? 'All Operating Stops' : 'Core Closest Stops'}
+          <span className="text-slate-300 hidden xs:inline">
+            {viewMode === 'all-8' ? 'All Operating' : 'Core 4 Closest'}
           </span>
         </div>
       </div>
 
-      {/* 3. ZERO-SCROLL MAIN VIEWPORT: Only functioning bus stops with active services */}
-      <main className="flex-1 min-h-0 p-2.5 overflow-hidden">
+      {/* 3. Mobile Quick Stop Filter Chips (Horizontal scrollable bar for phone commuters) */}
+      {functioningStops.length > 0 && (
+        <div className="lg:hidden px-3 py-2 bg-slate-950/95 border-b border-slate-800/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+          <button
+            onClick={() => setSelectedMobileStopId(null)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold whitespace-nowrap transition-colors min-h-[38px] flex items-center shrink-0 ${
+              selectedMobileStopId === null
+                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                : 'bg-slate-900 text-slate-300 border border-slate-800 hover:text-white'
+            }`}
+          >
+            All Stops ({functioningStops.length})
+          </button>
+          {functioningStops.map((stop) => {
+            const isSelected = selectedMobileStopId === stop.id;
+            return (
+              <button
+                key={stop.id}
+                onClick={() => setSelectedMobileStopId(isSelected ? null : stop.id)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap transition-colors min-h-[38px] flex items-center gap-1.5 shrink-0 ${
+                  isSelected
+                    ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
+                    : 'bg-slate-900 text-slate-300 border border-slate-800 hover:text-white'
+                }`}
+              >
+                <span className={`px-1 py-0.2 rounded text-[10px] font-bold ${
+                  isSelected ? 'bg-slate-950 text-amber-400' : 'bg-amber-400/20 text-amber-300'
+                }`}>
+                  {stop.id}
+                </span>
+                <span className="truncate max-w-[140px] text-[11px] font-medium">
+                  {stop.name}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 4. MAIN VIEWPORT: Kiosk on Desktop (Zero-scroll) + Touch Friendly on Mobile */}
+      <main className="flex-1 min-h-0 p-2.5 sm:p-3 overflow-y-auto lg:overflow-hidden">
         {isLoading ? (
-          <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-slate-400">
+          <div className="h-full min-h-[300px] w-full flex flex-col items-center justify-center gap-3 text-slate-400">
             <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-            <span className="font-mono text-sm font-semibold">
+            <span className="font-mono text-sm font-semibold text-center px-4">
               Loading active bus stops and live arrivals from /api/bustimings...
             </span>
           </div>
         ) : displayedStops.length === 0 ? (
-          <div className="h-full w-full flex flex-col items-center justify-center gap-2 text-slate-400">
+          <div className="h-full min-h-[300px] w-full flex flex-col items-center justify-center gap-2 text-slate-400 p-6 text-center">
             <span className="text-base font-bold text-slate-300">No Operating Bus Stops Detected</span>
             <span className="text-xs font-mono text-slate-500">
               All surrounding stops currently have no active bus services.
             </span>
+            {selectedMobileStopId && (
+              <button
+                onClick={() => setSelectedMobileStopId(null)}
+                className="mt-3 px-4 py-2 bg-amber-400 text-slate-950 text-xs font-bold rounded-lg"
+              >
+                Reset to View All Stops
+              </button>
+            )}
           </div>
         ) : (
           <div className={gridClass}>
@@ -291,7 +350,8 @@ export default function App() {
                   walkTimeMinutes={distance.walkTimeMinutes}
                   distanceMeters={distance.distanceMeters}
                   sheltered={distance.sheltered}
-                  maxRows={maxRowsPerCard}
+                  maxRows={selectedMobileStopId ? 10 : maxRowsPerCard}
+                  isMobileFocused={Boolean(selectedMobileStopId)}
                 />
               );
             })}
@@ -299,7 +359,33 @@ export default function App() {
         )}
       </main>
 
-      {/* 4. Concourse & Bus Stop Schematic Modal */}
+      {/* 5. Fixed Mobile Bottom Bar (Thumb ergonomics for phone users) */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-3 py-2 flex items-center justify-between shadow-2xl safe-area-bottom">
+        <button
+          onClick={handleManualRefresh}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-amber-400 text-xs font-mono font-bold min-h-[44px] active:scale-95 transition-transform"
+          aria-label="Refresh timings"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshSecondsLeft === 0 ? 'animate-spin' : ''}`} />
+          <span>Refresh ({refreshSecondsLeft}s)</span>
+        </button>
+
+        <div className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono text-emerald-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-subtle" />
+          <span>{functioningStops.length} stops</span>
+        </div>
+
+        <button
+          onClick={() => setIsMapOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold min-h-[44px] active:scale-95 transition-transform shadow-md"
+          aria-label="Open campus map"
+        >
+          <Footprints className="w-4 h-4" />
+          <span>Campus Map</span>
+        </button>
+      </div>
+
+      {/* 6. Concourse & Bus Stop Schematic Modal */}
       <CampusMapModal
         isOpen={isMapOpen}
         onClose={() => setIsMapOpen(false)}

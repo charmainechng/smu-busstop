@@ -200,7 +200,7 @@ export const CampusMapModal: React.FC<CampusMapModalProps> = ({
           </div>
 
           {/* Table of all 8 bus stops with exact distances */}
-          <div className="border border-slate-800 rounded-xl overflow-hidden">
+          <div className="border border-slate-800 rounded-xl overflow-x-auto">
             <div className="bg-slate-800/80 px-4 py-2.5 font-mono text-xs font-bold text-slate-200">
               Bus Stops Distance & Walk Time Directory (from {currentLobby.name})
             </div>

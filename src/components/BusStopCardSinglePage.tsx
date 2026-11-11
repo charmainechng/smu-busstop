@@ -9,6 +9,7 @@ interface BusStopCardSinglePageProps {
   distanceMeters: number;
   sheltered: boolean;
   maxRows?: number;
+  isMobileFocused?: boolean;
 }
 
 export const BusStopCardSinglePage: React.FC<BusStopCardSinglePageProps> = ({
@@ -17,6 +18,7 @@ export const BusStopCardSinglePage: React.FC<BusStopCardSinglePageProps> = ({
   distanceMeters,
   sheltered,
   maxRows = 4,
+  isMobileFocused = false,
 }) => {
   // Sort services by earliest arrival first
   const sortedServices = [...stop.services]
@@ -24,7 +26,7 @@ export const BusStopCardSinglePage: React.FC<BusStopCardSinglePageProps> = ({
     .slice(0, maxRows);
 
   return (
-    <div className="flex flex-col h-full bg-slate-900/95 border border-slate-800 rounded-xl overflow-hidden shadow-lg shadow-black/30 justify-between">
+    <div className="flex flex-col h-auto lg:h-full bg-slate-900/95 border border-slate-800 rounded-xl overflow-hidden shadow-lg shadow-black/30 justify-between">
       
       {/* Header: Stop Code + Name + Distance/Walk (High Contrast) */}
       <div className="px-3 py-2 bg-gradient-to-r from-slate-850 to-slate-900 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
@@ -78,11 +80,11 @@ export const BusStopCardSinglePage: React.FC<BusStopCardSinglePageProps> = ({
           return (
             <div
               key={service.serviceNo}
-              className="flex items-center justify-between py-1 gap-2 hover:bg-slate-800/30 rounded transition-colors px-1"
+              className="flex items-center justify-between py-1.5 lg:py-1 gap-2 hover:bg-slate-800/30 rounded transition-colors px-1 min-h-[46px] lg:min-h-0"
             >
               {/* Left: Bus Service Number & Destination */}
               <div className="flex items-center gap-2 min-w-0">
-                <span className="font-mono font-black text-xl sm:text-2xl px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 min-w-[52px] text-center shrink-0 tracking-tight shadow-sm">
+                <span className="font-mono font-black text-xl sm:text-2xl px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 min-w-[50px] sm:min-w-[52px] text-center shrink-0 tracking-tight shadow-sm">
                   {service.serviceNo}
                 </span>
 
@@ -91,7 +93,7 @@ export const BusStopCardSinglePage: React.FC<BusStopCardSinglePageProps> = ({
                     {service.destination}
                   </span>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[10px] font-mono text-slate-400 font-semibold">
+                    <span className="text-[10px] font-mono text-slate-400 font-semibold hidden xs:inline">
                       {next1.type === 'DD' ? 'Double Deck' : 'Single Deck'}
                     </span>
                     <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${catchability.badgeClass}`}>
@@ -123,9 +125,9 @@ export const BusStopCardSinglePage: React.FC<BusStopCardSinglePageProps> = ({
                   </div>
                 </div>
 
-                {/* 2nd Bus Timing */}
+                {/* 2nd Bus Timing (Visible on mobile phone & desktop wide) */}
                 {next2 && (
-                  <div className="hidden xl:flex flex-col items-end pl-1.5 border-l border-slate-800 text-[11px] font-mono text-slate-400">
+                  <div className="flex flex-col items-end pl-1.5 border-l border-slate-800 text-[11px] font-mono text-slate-400">
                     <span className="text-[9px] text-slate-500">2nd</span>
                     <span className="font-bold text-slate-300">{next2.durationMins}m</span>
                   </div>
