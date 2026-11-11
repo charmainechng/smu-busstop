@@ -1,36 +1,43 @@
 const LTA_BUS_STOPS_ENDPOINT = 'http://datamall2.mytransport.sg/ltaodataservice/BusStops';
 const LTA_METADATA_ENDPOINT = 'http://datamall2.mytransport.sg/ltaodataservice/$metadata#BusStops';
 
-// SMU Local Campus Bus Stops Directory
+// SMU Main Lobby coordinates (Connexion & Admin Building Hub)
+const SMU_LOBBY_LAT = 1.2960;
+const SMU_LOBBY_LNG = 103.8505;
+
+// Haversine formula to compute geodesic distance in meters
+function computeMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth radius in metres
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  // Walking factor ~ 1.25 for urban pedestrian paths
+  return Math.round(R * c * 1.25);
+}
+
+// SMU Surrounding Bus Stops Base Directory
 const SMU_SURROUNDING_BUS_STOPS = [
+  {
+    BusStopCode: '04121',
+    RoadName: 'Stamford Rd',
+    Description: 'SMU / Stamford Rd',
+    Latitude: 1.29543,
+    Longitude: 103.85018,
+    Sheltered: true,
+  },
   {
     BusStopCode: '04179',
     RoadName: 'Bras Basah Rd',
     Description: 'SMU / Bras Basah Stn Exit A',
     Latitude: 1.29684,
     Longitude: 103.85042,
-    DistanceMetersFromLobby: 75,
-    WalkTimeMinutes: 1,
-    Sheltered: true,
-  },
-  {
-    BusStopCode: '08069',
-    RoadName: 'Bras Basah Rd',
-    Description: 'Opp SMU / Hotel Rendezvous',
-    Latitude: 1.29821,
-    Longitude: 103.85012,
-    DistanceMetersFromLobby: 160,
-    WalkTimeMinutes: 2,
-    Sheltered: true,
-  },
-  {
-    BusStopCode: '04121',
-    RoadName: 'Stamford Rd',
-    Description: 'SMU / Stamford Rd (Connexion & Law)',
-    Latitude: 1.29543,
-    Longitude: 103.85018,
-    DistanceMetersFromLobby: 55,
-    WalkTimeMinutes: 1,
     Sheltered: true,
   },
   {
@@ -39,8 +46,14 @@ const SMU_SURROUNDING_BUS_STOPS = [
     Description: 'SMU / Opp Bencoolen Stn Exit B',
     Latitude: 1.29912,
     Longitude: 103.85072,
-    DistanceMetersFromLobby: 130,
-    WalkTimeMinutes: 1.5,
+    Sheltered: true,
+  },
+  {
+    BusStopCode: '08069',
+    RoadName: 'Bras Basah Rd',
+    Description: 'Opp SMU / Hotel Rendezvous',
+    Latitude: 1.29821,
+    Longitude: 103.85012,
     Sheltered: true,
   },
   {
@@ -49,8 +62,6 @@ const SMU_SURROUNDING_BUS_STOPS = [
     Description: 'Opp SMU / NTUC Income Centre',
     Latitude: 1.29881,
     Longitude: 103.85122,
-    DistanceMetersFromLobby: 190,
-    WalkTimeMinutes: 2.5,
     Sheltered: false,
   },
   {
@@ -59,8 +70,6 @@ const SMU_SURROUNDING_BUS_STOPS = [
     Description: 'Armenian Ch / Opp SMU Law',
     Latitude: 1.29382,
     Longitude: 103.85091,
-    DistanceMetersFromLobby: 220,
-    WalkTimeMinutes: 3,
     Sheltered: false,
   },
   {
@@ -69,8 +78,6 @@ const SMU_SURROUNDING_BUS_STOPS = [
     Description: 'Capitol Bldg / City Hall Stn Exit B',
     Latitude: 1.29342,
     Longitude: 103.85172,
-    DistanceMetersFromLobby: 310,
-    WalkTimeMinutes: 4,
     Sheltered: true,
   },
   {
@@ -79,62 +86,71 @@ const SMU_SURROUNDING_BUS_STOPS = [
     Description: 'Hotel Grand Pacific / Opp SMU',
     Latitude: 1.29742,
     Longitude: 103.85241,
-    DistanceMetersFromLobby: 240,
-    WalkTimeMinutes: 3,
     Sheltered: false,
   },
 ];
 
-export async function fetchLTABusStops(skip = 0) {
+export async function getSMUBusStopsFromLTA() {
   const accountKey = process.env.LTA_DATAMALL_API_KEY || process.env.ACCOUNT_KEY || process.env.LTA_ACCOUNT_KEY;
 
-  if (!accountKey || accountKey.trim().length === 0) {
-    return {
-      'odata.metadata': LTA_METADATA_ENDPOINT,
-      value: SMU_SURROUNDING_BUS_STOPS,
-      _dataSource: 'smu_campus_directory',
-      _note: 'Configure LTA_DATAMALL_API_KEY in .env to query live LTA DataMall stops catalog.',
-    };
-  }
+  let stopsCatalog = SMU_SURROUNDING_BUS_STOPS;
 
-  const targetUrl = `${LTA_BUS_STOPS_ENDPOINT}?$skip=${skip}`;
+  if (accountKey && accountKey.trim().length > 0) {
+    try {
+      // Query LTA BusStops endpoint (batch 0 contains stops starting with 01, 04, 07, 08)
+      const res = await fetch(`${LTA_BUS_STOPS_ENDPOINT}?$skip=0`, {
+        headers: {
+          AccountKey: accountKey.trim(),
+          accept: 'application/json',
+        },
+      });
 
-  try {
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-      headers: {
-        AccountKey: accountKey.trim(),
-        accept: 'application/json',
-      },
-    });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.value && Array.isArray(data.value)) {
+          const ltaStopsMap = new Map();
+          data.value.forEach((s: any) => ltaStopsMap.set(s.BusStopCode, s));
 
-    if (!response.ok) {
-      console.warn(`LTA DataMall BusStops responded with status ${response.status}`);
-      return {
-        'odata.metadata': LTA_METADATA_ENDPOINT,
-        value: SMU_SURROUNDING_BUS_STOPS,
-        _upstreamError: `LTA responded with HTTP ${response.status}`,
-      };
+          // Enhance stops with live data from LTA
+          stopsCatalog = SMU_SURROUNDING_BUS_STOPS.map((s) => {
+            const live = ltaStopsMap.get(s.BusStopCode);
+            if (live) {
+              return {
+                ...s,
+                RoadName: live.RoadName || s.RoadName,
+                Description: live.Description || s.Description,
+                Latitude: live.Latitude || s.Latitude,
+                Longitude: live.Longitude || s.Longitude,
+              };
+            }
+            return s;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch LTA bus stops live catalog:', err);
     }
-
-    const data = await response.json();
-    return {
-      'odata.metadata': LTA_METADATA_ENDPOINT,
-      ...data,
-      _dataSource: 'live_lta_datamall',
-    };
-  } catch (err: unknown) {
-    console.error('Error fetching LTA Bus Stops:', err);
-    return {
-      'odata.metadata': LTA_METADATA_ENDPOINT,
-      value: SMU_SURROUNDING_BUS_STOPS,
-    };
   }
+
+  // Compute dynamic walking distance & time from SMU Main Lobby
+  return stopsCatalog.map((s) => {
+    const distMeters = computeMeters(SMU_LOBBY_LAT, SMU_LOBBY_LNG, s.Latitude, s.Longitude);
+    const walkMins = Math.max(1, Math.round(distMeters / 75)); // standard walking speed 75m/min
+    return {
+      BusStopCode: s.BusStopCode,
+      RoadName: s.RoadName,
+      Description: s.Description,
+      Latitude: s.Latitude,
+      Longitude: s.Longitude,
+      DistanceMetersFromLobby: distMeters,
+      WalkTimeMinutes: walkMins,
+      Sheltered: s.Sheltered,
+    };
+  });
 }
 
 // Universal Serverless + Express Handler
 export default async function handler(req: any, res: any) {
-  // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -144,38 +160,23 @@ export default async function handler(req: any, res: any) {
   );
 
   if (req.method === 'OPTIONS') {
-    if (typeof res.status === 'function') {
-      return res.status(200).end();
-    }
+    if (typeof res.status === 'function') return res.status(200).end();
     res.writeHead(200);
     return res.end();
   }
 
-  let query = req.query || {};
-  if (!query || Object.keys(query).length === 0) {
-    try {
-      const parsedUrl = new URL(req.url, 'http://localhost');
-      query = Object.fromEntries(parsedUrl.searchParams.entries());
-    } catch {
-      query = {};
-    }
-  }
+  const smuStops = await getSMUBusStopsFromLTA();
 
-  const rawSkip = query.$skip || query.skip || '0';
-  const skip = parseInt(Array.isArray(rawSkip) ? rawSkip[0] : rawSkip, 10);
-  const smuOnly = query.smu !== 'false';
-
-  let payload: any;
-  if (smuOnly) {
-    payload = {
-      'odata.metadata': LTA_METADATA_ENDPOINT,
-      campus: 'Singapore Management University',
-      primaryLobby: 'SMU Connexion / Administration Building',
-      value: SMU_SURROUNDING_BUS_STOPS,
-    };
-  } else {
-    payload = await fetchLTABusStops(skip);
-  }
+  const payload = {
+    'odata.metadata': LTA_METADATA_ENDPOINT,
+    campus: 'Singapore Management University',
+    primaryLobby: 'SMU Connexion / Administration Building',
+    originCoordinates: {
+      latitude: SMU_LOBBY_LAT,
+      longitude: SMU_LOBBY_LNG,
+    },
+    value: smuStops,
+  };
 
   if (typeof res.json === 'function') {
     return res.status(200).json(payload);
