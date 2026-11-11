@@ -161,7 +161,8 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  const skip = parseInt((query.$skip as string) || (query.skip as string) || '0', 10);
+  const rawSkip = query.$skip || query.skip || '0';
+  const skip = parseInt(Array.isArray(rawSkip) ? rawSkip[0] : rawSkip, 10);
   const smuOnly = query.smu !== 'false';
 
   let payload: any;

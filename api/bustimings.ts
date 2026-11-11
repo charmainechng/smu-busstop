@@ -149,9 +149,11 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  const busStopCode = (query.BusStopCode as string) || (query.stop as string) || '04179';
-  const serviceNo = query.ServiceNo as string | undefined;
-  const stopsQuery = (query.stops as string) || (query.stopCodes as string);
+  const rawStopCode = query.BusStopCode || query.stop || '04179';
+  const busStopCode = Array.isArray(rawStopCode) ? String(rawStopCode[0]) : String(rawStopCode);
+  const serviceNo = Array.isArray(query.ServiceNo) ? String(query.ServiceNo[0]) : (query.ServiceNo as string | undefined);
+  const rawStops = query.stops || query.stopCodes;
+  const stopsQuery = Array.isArray(rawStops) ? String(rawStops[0]) : (rawStops as string | undefined);
 
   let payload: any;
 
