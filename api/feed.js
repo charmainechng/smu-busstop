@@ -79,13 +79,13 @@ export default async function feedHandler(req, res) {
   // 3. Fetch board readings reusing shared bus module
   const { stops, sourceError } = await fetchAllBoardStops();
 
+  // Remove bus stops that do not have any bus services (assumed to be not functioning)
+  const functioningStops = stops.filter((stop) => stop.services && stop.services.length > 0);
+  const displayStops = functioningStops.length > 0 ? functioningStops : stops;
+
   // 4. Construct Item Title:
   // "every stop on the board with its soonest bus, for example: 04121 bus 7 in 2 min; then the next stop the same way"
-  const stopSummaryParts = stops.map((stop) => {
-    if (!stop.services || stop.services.length === 0) {
-      return `${stop.stopCode} no services`;
-    }
-
+  const stopSummaryParts = displayStops.map((stop) => {
     // Find soonest bus at this stop
     let soonest = stop.services[0];
     for (const s of stop.services) {
@@ -108,19 +108,15 @@ export default async function feedHandler(req, res) {
   // 5. Construct Item Description (plain text only, no HTML):
   // "For each stop on the board, the services there with their next two buses in minutes, then the time of the reading in Singapore time."
   const descriptionLines = [];
-  stops.forEach((stop) => {
+  displayStops.forEach((stop) => {
     descriptionLines.push(`Stop ${stop.stopCode} (${stop.stopName}):`);
-    if (!stop.services || stop.services.length === 0) {
-      descriptionLines.push('  No active services reported');
-    } else {
-      stop.services.forEach((s) => {
-        let busesText = `${s.next1Mins} min`;
-        if (s.next2Mins !== undefined && s.next2Mins !== null) {
-          busesText += `, ${s.next2Mins} min`;
-        }
-        descriptionLines.push(`  Bus ${s.serviceNo}: ${busesText}`);
-      });
-    }
+    stop.services.forEach((s) => {
+      let busesText = `${s.next1Mins} min`;
+      if (s.next2Mins !== undefined && s.next2Mins !== null) {
+        busesText += `, ${s.next2Mins} min`;
+      }
+      descriptionLines.push(`  Bus ${s.serviceNo}: ${busesText}`);
+    });
     descriptionLines.push('');
   });
 

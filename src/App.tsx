@@ -193,10 +193,29 @@ export default function App() {
     setRefreshSecondsLeft(REFRESH_INTERVAL_SECONDS);
   };
 
+  // Remove bus stops that do not have any bus services (assumed to be not functioning)
+  const functioningStops = busStops.filter((s) => s.services && s.services.length > 0);
+
   const displayedStops =
     viewMode === 'core-4'
-      ? busStops.filter((s) => ['04121', '04179', '04029', '08069'].includes(s.id))
-      : busStops;
+      ? functioningStops.filter((s) => ['04121', '04179', '04029', '08069'].includes(s.id))
+      : functioningStops;
+
+  // Responsive grid layout based on number of active functioning stops to maintain zero scroll
+  const getGridClass = (count: number, isCore4: boolean) => {
+    if (isCore4 || count <= 4) {
+      if (count <= 2) return 'grid grid-cols-1 sm:grid-cols-2 grid-rows-1 gap-3 h-full w-full overflow-hidden';
+      if (count === 3) return 'grid grid-cols-1 sm:grid-cols-3 grid-rows-1 gap-3 h-full w-full overflow-hidden';
+      return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 grid-rows-1 gap-3 h-full w-full overflow-hidden';
+    }
+    if (count <= 6) {
+      return 'grid grid-cols-2 lg:grid-cols-3 grid-rows-2 gap-2.5 h-full w-full overflow-hidden';
+    }
+    return 'grid grid-cols-2 lg:grid-cols-4 grid-rows-2 gap-2.5 h-full w-full overflow-hidden';
+  };
+
+  const gridClass = getGridClass(displayedStops.length, viewMode === 'core-4');
+  const maxRowsPerCard = displayedStops.length <= 4 || viewMode === 'core-4' ? 6 : 4;
 
   return (
     <div className="h-screen max-h-screen w-screen max-w-screen overflow-hidden flex flex-col bg-slate-950 text-slate-100 font-sans select-none antialiased">
@@ -232,46 +251,33 @@ export default function App() {
         <div className="flex items-center gap-3 text-[11px] text-slate-400">
           <span className="text-slate-300 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse-subtle" />
-            Data: Live API ({isLtaConfigured ? 'LTA Production' : 'LTA Service Feed'})
+            {displayedStops.length} Active Stops Operating
           </span>
           <span className="text-slate-600 hidden md:inline">|</span>
           <span className="text-slate-300">
-            {viewMode === 'all-8' ? 'All 8 Surrounding Stops' : 'Core 4 Closest Stops'}
+            {viewMode === 'all-8' ? 'All Operating Stops' : 'Core Closest Stops'}
           </span>
         </div>
       </div>
 
-      {/* 3. ZERO-SCROLL MAIN VIEWPORT: Filled with live API bus data */}
+      {/* 3. ZERO-SCROLL MAIN VIEWPORT: Only functioning bus stops with active services */}
       <main className="flex-1 min-h-0 p-2.5 overflow-hidden">
         {isLoading ? (
           <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-slate-400">
             <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
             <span className="font-mono text-sm font-semibold">
-              Loading bus stops and live arrivals from /api/bustimings...
+              Loading active bus stops and live arrivals from /api/bustimings...
             </span>
           </div>
-        ) : viewMode === 'all-8' ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 grid-rows-2 gap-2.5 h-full w-full overflow-hidden">
-            {displayedStops.map((stop) => {
-              const distance = stop.distances[SMU_MAIN_LOBBY.id] || {
-                distanceMeters: 100,
-                walkTimeMinutes: 1,
-                sheltered: true,
-              };
-              return (
-                <BusStopCardSinglePage
-                  key={stop.id}
-                  stop={stop}
-                  walkTimeMinutes={distance.walkTimeMinutes}
-                  distanceMeters={distance.distanceMeters}
-                  sheltered={distance.sheltered}
-                  maxRows={4}
-                />
-              );
-            })}
+        ) : displayedStops.length === 0 ? (
+          <div className="h-full w-full flex flex-col items-center justify-center gap-2 text-slate-400">
+            <span className="text-base font-bold text-slate-300">No Operating Bus Stops Detected</span>
+            <span className="text-xs font-mono text-slate-500">
+              All surrounding stops currently have no active bus services.
+            </span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 grid-rows-1 gap-3 h-full w-full overflow-hidden">
+          <div className={gridClass}>
             {displayedStops.map((stop) => {
               const distance = stop.distances[SMU_MAIN_LOBBY.id] || {
                 distanceMeters: 100,
@@ -285,7 +291,7 @@ export default function App() {
                   walkTimeMinutes={distance.walkTimeMinutes}
                   distanceMeters={distance.distanceMeters}
                   sheltered={distance.sheltered}
-                  maxRows={7}
+                  maxRows={maxRowsPerCard}
                 />
               );
             })}
