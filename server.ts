@@ -2,9 +2,9 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import healthRouter from './api/health.ts';
-import busTimingsRouter from './api/bustimings.ts';
-import busStopsRouter from './api/busstops.ts';
+import healthHandler from './api/health.ts';
+import busTimingsHandler from './api/bustimings.ts';
+import busStopsHandler from './api/busstops.ts';
 
 dotenv.config();
 
@@ -17,10 +17,29 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 app.use(express.json());
 
-// 1. API Endpoints
-app.use('/api/health', healthRouter);
-app.use('/api/bustimings', busTimingsRouter);
-app.use('/api/busstops', busStopsRouter);
+// Enable global CORS
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST,PUT,DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, AccountKey, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// 1. API Endpoints (Mount universal serverless handlers)
+app.all(['/api/health', '/api/health/', '/api/health.ts', '/health'], (req, res) => {
+  return healthHandler(req, res);
+});
+
+app.all(['/api/bustimings', '/api/bustimings/', '/api/bustimings.ts', '/bustimings'], (req, res) => {
+  return busTimingsHandler(req, res);
+});
+
+app.all(['/api/busstops', '/api/busstops/', '/api/busstops.ts', '/busstops'], (req, res) => {
+  return busStopsHandler(req, res);
+});
 
 // 2. Frontend integration (Vite dev server or static build)
 if (!isProduction) {

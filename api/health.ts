@@ -1,14 +1,28 @@
-import { Request, Response, Router } from 'express';
+// Universal Serverless Function (Vercel, Netlify, Express, Node HTTP)
+export default async function handler(req: any, res: any) {
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, AccountKey'
+  );
 
-const router = Router();
+  if (req.method === 'OPTIONS') {
+    if (typeof res.status === 'function') {
+      return res.status(200).end();
+    }
+    res.writeHead(200);
+    return res.end();
+  }
 
-export function getHealthStatus() {
   const apiKey = process.env.LTA_DATAMALL_API_KEY || process.env.ACCOUNT_KEY || process.env.LTA_ACCOUNT_KEY;
-  return {
+  const payload = {
     status: 'ok',
     service: 'smu-lobby-transit-api',
     timestamp: new Date().toISOString(),
-    uptimeSeconds: Math.floor(process.uptime()),
+    uptimeSeconds: typeof process.uptime === 'function' ? Math.floor(process.uptime()) : 0,
     ltaDataMall: {
       accountKeyConfigured: Boolean(apiKey && apiKey.trim().length > 0),
       endpoints: {
@@ -17,13 +31,11 @@ export function getHealthStatus() {
       },
     },
   };
+
+  if (typeof res.json === 'function') {
+    return res.status(200).json(payload);
+  } else {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(payload));
+  }
 }
-
-export async function healthHandler(req: Request, res: Response) {
-  const health = getHealthStatus();
-  res.json(health);
-}
-
-router.get('/', healthHandler);
-
-export default router;

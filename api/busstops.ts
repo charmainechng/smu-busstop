@@ -1,7 +1,3 @@
-import { Request, Response, Router } from 'express';
-
-const router = Router();
-
 const LTA_BUS_STOPS_ENDPOINT = 'http://datamall2.mytransport.sg/ltaodataservice/BusStops';
 const LTA_METADATA_ENDPOINT = 'http://datamall2.mytransport.sg/ltaodataservice/$metadata#BusStops';
 
@@ -136,24 +132,54 @@ export async function fetchLTABusStops(skip = 0) {
   }
 }
 
-export async function busStopsHandler(req: Request, res: Response) {
-  const skip = parseInt((req.query.$skip as string) || (req.query.skip as string) || '0', 10);
-  const smuOnly = req.query.smu !== 'false';
+// Universal Serverless + Express Handler
+export default async function handler(req: any, res: any) {
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, AccountKey'
+  );
 
+  if (req.method === 'OPTIONS') {
+    if (typeof res.status === 'function') {
+      return res.status(200).end();
+    }
+    res.writeHead(200);
+    return res.end();
+  }
+
+  let query = req.query || {};
+  if (!query || Object.keys(query).length === 0) {
+    try {
+      const parsedUrl = new URL(req.url, 'http://localhost');
+      query = Object.fromEntries(parsedUrl.searchParams.entries());
+    } catch {
+      query = {};
+    }
+  }
+
+  const skip = parseInt((query.$skip as string) || (query.skip as string) || '0', 10);
+  const smuOnly = query.smu !== 'false';
+
+  let payload: any;
   if (smuOnly) {
-    res.json({
+    payload = {
       'odata.metadata': LTA_METADATA_ENDPOINT,
       campus: 'Singapore Management University',
       primaryLobby: 'SMU Connexion / Administration Building',
       value: SMU_SURROUNDING_BUS_STOPS,
-    });
-    return;
+    };
+  } else {
+    payload = await fetchLTABusStops(skip);
   }
 
-  const result = await fetchLTABusStops(skip);
-  res.json(result);
+  if (typeof res.json === 'function') {
+    return res.status(200).json(payload);
+  } else {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(payload));
+  }
 }
-
-router.get('/', busStopsHandler);
-
-export default router;

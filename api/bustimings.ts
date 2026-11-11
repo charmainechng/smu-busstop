@@ -1,7 +1,3 @@
-import { Request, Response, Router } from 'express';
-
-const router = Router();
-
 const LTA_BUS_ARRIVAL_ENDPOINT = 'https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival';
 
 // SMU Bus Stops catalog for accurate fallback if AccountKey is pending or not yet configured
@@ -23,7 +19,6 @@ function generateFallbackLTAArrivals(busStopCode: string, serviceNoFilter?: stri
   const services = serviceList
     .filter((svc) => !serviceNoFilter || svc === serviceNoFilter)
     .map((svc) => {
-      // Deterministic but realistic minutes based on current time & service
       const hash = (busStopCode + svc).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const min1 = Math.max(0, (Math.floor(now / 45000) + hash) % 11);
       const min2 = min1 + 6 + (hash % 7);
@@ -106,7 +101,6 @@ export async function fetchLTABusArrival(busStopCode: string, serviceNo?: string
 
     if (!response.ok) {
       console.warn(`LTA DataMall API responded with status ${response.status}: ${response.statusText}`);
-      // Return fallback with error context so UI continues uninterrupted
       const fallback = generateFallbackLTAArrivals(busStopCode, serviceNo);
       return {
         ...fallback,
@@ -125,16 +119,46 @@ export async function fetchLTABusArrival(busStopCode: string, serviceNo?: string
   }
 }
 
-export async function busTimingsHandler(req: Request, res: Response) {
-  const busStopCode = (req.query.BusStopCode as string) || (req.query.stop as string) || '04179';
-  const serviceNo = req.query.ServiceNo as string | undefined;
+// Universal Serverless + Express Handler
+export default async function handler(req: any, res: any) {
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, AccountKey'
+  );
 
-  // Support batch request: ?stops=04179,08069,04121
-  const stopsQuery = (req.query.stops as string) || (req.query.stopCodes as string);
+  if (req.method === 'OPTIONS') {
+    if (typeof res.status === 'function') {
+      return res.status(200).end();
+    }
+    res.writeHead(200);
+    return res.end();
+  }
+
+  // Parse query parameters from req.query or fallback to req.url
+  let query = req.query || {};
+  if (!query || Object.keys(query).length === 0) {
+    try {
+      const parsedUrl = new URL(req.url, 'http://localhost');
+      query = Object.fromEntries(parsedUrl.searchParams.entries());
+    } catch {
+      query = {};
+    }
+  }
+
+  const busStopCode = (query.BusStopCode as string) || (query.stop as string) || '04179';
+  const serviceNo = query.ServiceNo as string | undefined;
+  const stopsQuery = (query.stops as string) || (query.stopCodes as string);
+
+  let payload: any;
+
   if (stopsQuery) {
-    const stopList = stopsQuery.split(',').map((s) => s.trim()).filter(Boolean);
+    const stopList = stopsQuery.split(',').map((s: string) => s.trim()).filter(Boolean);
     const results = await Promise.all(
-      stopList.map(async (code) => {
+      stopList.map(async (code: string) => {
         const data = await fetchLTABusArrival(code);
         return {
           busStopCode: code,
@@ -142,17 +166,18 @@ export async function busTimingsHandler(req: Request, res: Response) {
         };
       })
     );
-    res.json({
+    payload = {
       timestamp: new Date().toISOString(),
       stops: results,
-    });
-    return;
+    };
+  } else {
+    payload = await fetchLTABusArrival(busStopCode, serviceNo);
   }
 
-  const result = await fetchLTABusArrival(busStopCode, serviceNo);
-  res.json(result);
+  if (typeof res.json === 'function') {
+    return res.status(200).json(payload);
+  } else {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(payload));
+  }
 }
-
-router.get('/', busTimingsHandler);
-
-export default router;
